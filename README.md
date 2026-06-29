@@ -100,7 +100,8 @@ docker compose logs -f --tail=200 notifier
 На Windows открой отдельное окно CMD или PowerShell и оставь команду работающей:
 
 ```powershell
-ssh -L 6080:127.0.0.1:6080 root@132.243.112.85
+$ServerIp = Read-Host "Введите IP сервера"
+ssh -L 6080:127.0.0.1:6080 "root@$ServerIp"
 ```
 
 Затем открой в браузере:
