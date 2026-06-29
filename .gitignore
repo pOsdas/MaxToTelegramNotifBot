@@ -1,18 +1,82 @@
+# Секреты и локальные настройки
 .env
+.env.*
+!.env.example
+
+# SSH-ключи и сертификаты
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+
+# Виртуальные окружения Python
+.venv/
+venv/
+env/
+
+# Python
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+build/
+dist/
+
+# Тесты и анализ кода
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
-.venv/
+.mypy_cache/
+.ruff_cache/
+playwright-report/
+test-results/
+
+# IDE
 .idea/
 .vscode/
+*.code-workspace
 
+# Системные файлы
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Базы данных
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Логи, архивы и временные файлы
+*.log
+*.zip
+*.tar
+*.tar.gz
+*.tmp
+*.temp
+*.bak
+
+# Диагностические файлы проекта
+max-debug*
+detector-inside-container.txt
+
+# Рабочие данные приложения
 runtime/data/*
 !runtime/data/.gitkeep
+
 runtime/browser-profile/*
 !runtime/browser-profile/.gitkeep
+
 runtime/screenshots/*
 !runtime/screenshots/.gitkeep
+
 runtime/logs/*
 !runtime/logs/.gitkeep
