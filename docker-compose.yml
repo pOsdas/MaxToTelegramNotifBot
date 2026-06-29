@@ -1,0 +1,29 @@
+services:
+  notifier:
+    build:
+      context: .
+    container_name: max-telegram-notifier
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    volumes:
+      - ./runtime/data:/app/runtime/data
+      - ./runtime/browser-profile:/app/runtime/browser-profile
+      - ./runtime/screenshots:/app/runtime/screenshots
+      - ./runtime/logs:/app/runtime/logs
+    ports:
+      - "127.0.0.1:6080:6080"
+    shm_size: "1gb"
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

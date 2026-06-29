@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+.venv
+__pycache__
+.pytest_cache
+.coverage
+htmlcov
+runtime/data/*
+runtime/browser-profile/*
+runtime/screenshots/*
+runtime/logs/*
+*.zip

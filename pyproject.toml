@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "max-telegram-notifier"
+version = "0.1.0"
+description = "Persistent Playwright monitor that notifies Telegram about unread MAX messages"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiosqlite (>=0.20,<1)",
+    "httpx (>=0.28,<1)",
+    "playwright (==1.60.0)",
+    "pydantic (>=2.10,<3)",
+    "pydantic-settings (>=2.7,<3)"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3,<9",
+    "pytest-asyncio>=0.25,<1",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+asyncio_mode = "auto"
