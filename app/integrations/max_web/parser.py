@@ -45,6 +45,8 @@ class UnreadDomParser:
             page_title=str(raw.get("title") or ""),
             diagnostics={
                 "candidate_count": raw.get("candidateCount", 0),
+                "matched_chat_count": raw.get("matchedChatCount", len(chats)),
+                "unmatched_unread_total": raw.get("unmatchedUnreadTotal", 0),
                 "title_total": title_total,
                 "dom_total": dom_total,
             },

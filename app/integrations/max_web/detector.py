@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from app.integrations.max_web.selectors import (
-    CHAT_CONTAINER_SELECTOR,
+    CHAT_NAME_SELECTORS,
+    CHAT_ROW_SELECTOR,
+    CHAT_SNIPPET_SELECTORS,
+    CHAT_TIME_SELECTORS,
     UNREAD_CANDIDATE_SELECTORS,
 )
 
@@ -9,46 +12,82 @@ from app.integrations.max_web.selectors import (
 UNREAD_SCAN_SCRIPT = r"""
 (args) => {
   const unreadSelectors = args.unreadSelectors;
-  const chatContainerSelector = args.chatContainerSelector;
+  const chatRowSelector = args.chatRowSelector;
+  const chatNameSelectors = args.chatNameSelectors;
+  const chatSnippetSelectors = args.chatSnippetSelectors;
+  const chatTimeSelectors = args.chatTimeSelectors;
 
   const isVisible = (element) => {
     if (!(element instanceof Element)) return false;
+
     const style = window.getComputedStyle(element);
     const rect = element.getBoundingClientRect();
-    return style.display !== 'none' &&
-      style.visibility !== 'hidden' &&
-      Number(style.opacity || '1') > 0 &&
-      rect.width > 0 && rect.height > 0;
+
+    return style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      Number(style.opacity || "1") > 0 &&
+      rect.width > 0 &&
+      rect.height > 0;
   };
 
-  const parseCount = (value) => {
-    if (!value) return 0;
-    const compact = String(value).replace(/\s+/g, ' ').trim();
-    const match = compact.match(/(?:^|\D)(\d{1,4})(?:\D|$)/);
-    if (!match) return 0;
-    const number = Number(match[1]);
-    return Number.isFinite(number) && number >= 0 ? number : 0;
-  };
+  const normalize = (value) => String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
 
-  const normalizedLines = (text) => String(text || '')
-    .split(/+/)
-    .map((line) => line.replace(/\s+/g, ' ').trim())
+  const normalizedLines = (value) => String(value || "")
+    .split("\n")
+    .map((line) => normalize(line))
     .filter(Boolean);
 
-  const title = document.title || '';
-  const titleMatch = title.match(/^\s*(?:\((\d{1,4})\)|\[(\d{1,4})\])/);
-  const titleTotal = titleMatch ? Number(titleMatch[1] || titleMatch[2]) : 0;
+  const parseCount = (value) => {
+    const compact = normalize(value);
+    const match = compact.match(/(?:^|\D)(\d{1,4})(?:\D|$)/);
 
-  const candidates = [];
+    if (!match) return 0;
+
+    const count = Number(match[1]);
+    return Number.isFinite(count) && count > 0 ? count : 0;
+  };
+
+  const firstText = (root, selectors) => {
+    for (const selector of selectors) {
+      try {
+        const element = root.querySelector(selector);
+        const text = normalize(element?.textContent);
+        if (text) return text;
+      } catch (_) {
+        // Один невалидный селектор не должен ломать весь цикл проверки.
+      }
+    }
+    return "";
+  };
+
+  const title = document.title || "";
+
+  // MAX Web сейчас использует заголовок вида "2 непрочитанных чата".
+  // Оставляем также поддержку старых форматов "(2) MAX" и "[2] MAX".
+  const titleWordMatch = title.match(
+    /^\s*(\d{1,4})\s+(?:непрочитан|unread)/i
+  );
+  const titleBracketMatch = title.match(
+    /^\s*[\[(](\d{1,4})[\])]/
+  );
+  const titleTotal = Number(
+    titleWordMatch?.[1] || titleBracketMatch?.[1] || 0
+  );
+
   const candidateSet = new Set();
+  const candidates = [];
 
   for (const selector of unreadSelectors) {
     let elements = [];
+
     try {
       elements = Array.from(document.querySelectorAll(selector));
     } catch (_) {
       continue;
     }
+
     for (const element of elements) {
       if (!candidateSet.has(element) && isVisible(element)) {
         candidateSet.add(element);
@@ -57,76 +96,86 @@ UNREAD_SCAN_SCRIPT = r"""
     }
   }
 
-  const chatsByKey = new Map();
-  let looseTotal = 0;
+  const chats = [];
+  const seenRows = new Set();
+  let unmatchedUnreadTotal = 0;
 
-  candidates.slice(0, 300).forEach((candidate, index) => {
-    const text = candidate.textContent || '';
-    const aria = candidate.getAttribute('aria-label') || '';
-    const titleAttr = candidate.getAttribute('title') || '';
-    const testId = candidate.getAttribute('data-testid') || '';
-    const qa = candidate.getAttribute('data-qa') || '';
-    const className = typeof candidate.className === 'string' ? candidate.className : '';
-    const semanticText = `${text} ${aria} ${titleAttr} ${testId} ${qa} ${className}`;
+  for (const candidate of candidates.slice(0, 300)) {
+    const aria = normalize(candidate.getAttribute("aria-label"));
+    const titleAttr = normalize(candidate.getAttribute("title"));
+    const text = normalize(candidate.textContent);
+    const semanticText = normalize(`${aria} ${titleAttr} ${text}`).toLowerCase();
 
-    const semanticUnread = /непрочитан|unread/i.test(semanticText);
-    let unreadCount = Math.max(
-      parseCount(text),
+    const isRussianUnreadMessage =
+      semanticText.includes("нов") && semanticText.includes("сообщен");
+    const isEnglishUnreadMessage =
+      semanticText.includes("unread") && semanticText.includes("message");
+
+    // Счётчики папок имеют текст "непрочитанных чатов" и сюда не попадают.
+    if (!isRussianUnreadMessage && !isEnglishUnreadMessage) {
+      continue;
+    }
+
+    const unreadCount = Math.max(
       parseCount(aria),
-      parseCount(titleAttr)
+      parseCount(titleAttr),
+      parseCount(text),
+      1
     );
-    if (!unreadCount && semanticUnread) unreadCount = 1;
 
-    // Обычные декоративные badge/counter без числа и без слова unread пропускаем.
-    if (!unreadCount) return;
+    const row = candidate.closest(chatRowSelector);
 
-    const container = candidate.closest(chatContainerSelector);
-    if (!container || !isVisible(container)) {
-      looseTotal += unreadCount;
-      return;
+    if (!row || !isVisible(row)) {
+      unmatchedUnreadTotal += unreadCount;
+      continue;
     }
 
-    const rawText = (container.innerText || container.textContent || '').trim();
-    const lines = normalizedLines(rawText);
-    const meaningful = lines.filter((line) => !/^\d{1,4}$/.test(line));
-
-    const name = meaningful[0] ||
-      container.getAttribute('aria-label') ||
-      container.getAttribute('title') ||
-      'Неизвестный чат';
-    const snippet = meaningful.length > 1 ? meaningful[meaningful.length - 1] : '';
-
-    const href = container instanceof HTMLAnchorElement ? container.getAttribute('href') : '';
-    const key =
-      container.getAttribute('data-chat-id') ||
-      container.getAttribute('data-dialog-id') ||
-      container.getAttribute('data-testid') ||
-      container.getAttribute('data-qa') ||
-      href ||
-      container.getAttribute('aria-label') ||
-      `${name}|${snippet}|${index}`;
-
-    const existing = chatsByKey.get(key);
-    if (!existing || unreadCount > existing.unreadCount) {
-      chatsByKey.set(key, {
-        key,
-        name: String(name).slice(0, 200),
-        snippet: String(snippet).slice(0, 500),
-        unreadCount,
-        rawText: String(rawText).slice(0, 1500),
-      });
+    if (seenRows.has(row)) {
+      continue;
     }
-  });
+    seenRows.add(row);
 
-  const chats = Array.from(chatsByKey.values());
-  const chatTotal = chats.reduce((sum, chat) => sum + chat.unreadCount, 0);
-  const domTotal = Math.max(chatTotal + looseTotal, chats.length);
+    const name = firstText(row, chatNameSelectors) || "Неизвестный чат";
+    const snippet = firstText(row, chatSnippetSelectors);
+    const time = firstText(row, chatTimeSelectors);
+    const rawText = normalize(row.innerText || row.textContent || "");
+
+    const stableId =
+      row.getAttribute("data-chat-id") ||
+      row.getAttribute("data-dialog-id") ||
+      row.getAttribute("data-peer-id") ||
+      row.querySelector("[data-chat-id]")?.getAttribute("data-chat-id") ||
+      row.querySelector("[data-dialog-id]")?.getAttribute("data-dialog-id") ||
+      "";
+
+    // В текущей разметке отдельного ID чата нет. Имя является более стабильным
+    // ключом, чем data-index: индекс меняется при сортировке списка чатов.
+    const key = normalize(stableId) || name.toLocaleLowerCase("ru-RU");
+
+    chats.push({
+      key,
+      name: name.slice(0, 200),
+      snippet: snippet.slice(0, 1000),
+      unreadCount,
+      rawText: rawText.slice(0, 2000),
+      time: time.slice(0, 100),
+      rowIndex: row.getAttribute("data-index") || "",
+    });
+  }
+
+  const chatTotal = chats.reduce(
+    (sum, chat) => sum + chat.unreadCount,
+    0
+  );
+  const domTotal = chatTotal + unmatchedUnreadTotal;
 
   return {
     title,
     titleTotal,
     domTotal,
     candidateCount: candidates.length,
+    matchedChatCount: chats.length,
+    unmatchedUnreadTotal,
     chats,
     url: location.href,
   };
@@ -136,5 +185,8 @@ UNREAD_SCAN_SCRIPT = r"""
 
 SCAN_ARGUMENTS = {
     "unreadSelectors": list(UNREAD_CANDIDATE_SELECTORS),
-    "chatContainerSelector": CHAT_CONTAINER_SELECTOR,
+    "chatRowSelector": CHAT_ROW_SELECTOR,
+    "chatNameSelectors": list(CHAT_NAME_SELECTORS),
+    "chatSnippetSelectors": list(CHAT_SNIPPET_SELECTORS),
+    "chatTimeSelectors": list(CHAT_TIME_SELECTORS),
 }

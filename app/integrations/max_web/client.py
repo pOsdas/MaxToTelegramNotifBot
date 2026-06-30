@@ -21,6 +21,7 @@ class MaxWebClient:
         self._auth = MaxAuthDetector()
         self._parser = UnreadDomParser()
         self._logger = get_logger(__name__)
+        self._last_dom_mismatch_diagnostic_at: datetime | None = None
 
     async def start(self) -> None:
         page = await self._browser.start()
@@ -40,6 +41,25 @@ class MaxWebClient:
         raw = await page.evaluate(UNREAD_SCAN_SCRIPT, SCAN_ARGUMENTS)
         snapshot = self._parser.parse(raw)
         snapshot.captured_at = datetime.now(timezone.utc)
+
+        # Если заголовок страницы сообщает о непрочитанных чатах, но строки
+        # чатов распознать не удалось, пользователь всё равно получит общее
+        # уведомление, а мы сохраним HTML и скриншот для обновления селекторов.
+        if snapshot.total_unread > 0 and not snapshot.chats:
+            now = datetime.now(timezone.utc)
+            last = self._last_dom_mismatch_diagnostic_at
+            should_save = (
+                last is None
+                or (now - last).total_seconds()
+                >= self._settings.error_alert_interval_seconds
+            )
+            if should_save:
+                self._logger.warning(
+                    "MAX показывает непрочитанные чаты, но их строки не распознаны"
+                )
+                await self.save_diagnostics("unread_without_chat_details")
+                self._last_dom_mismatch_diagnostic_at = now
+
         return snapshot
 
     async def save_diagnostics(self, reason: str) -> tuple[Path, Path, Path]:

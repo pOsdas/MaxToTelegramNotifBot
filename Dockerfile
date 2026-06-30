@@ -3,43 +3,46 @@ FROM mcr.microsoft.com/playwright/python:v1.60.0-noble
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    DISPLAY=:99
+    DISPLAY=:99 \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:${PATH}" \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 USER root
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        python3-venv \
         fluxbox \
         novnc \
-        python3-venv \
         websockify \
         x11-utils \
         x11vnc \
         xvfb \
     && rm -rf /var/lib/apt/lists/*
 
-ENV VIRTUAL_ENV=/opt/venv
+WORKDIR /app
 
-RUN python -m venv "${VIRTUAL_ENV}" \
+# Создаём отдельное окружение, чтобы pip не конфликтовал
+# с системными пакетами Ubuntu.
+RUN python3 -m venv "${VIRTUAL_ENV}" \
     && "${VIRTUAL_ENV}/bin/python" -m pip install --upgrade \
         pip \
         setuptools \
         wheel
 
-ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
-
-WORKDIR /app
-
 COPY pyproject.toml README.md ./
 COPY app ./app
 
-RUN python -m pip install .
+RUN "${VIRTUAL_ENV}/bin/python" -m pip install .
 
 COPY scripts ./scripts
 COPY tests ./tests
 COPY healthcheck.py docker-entrypoint.sh Makefile ./
 
-RUN chmod +x /app/docker-entrypoint.sh \
+# Удаляем Windows-переносы CRLF и выдаём право на запуск.
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh \
+    && chmod +x /app/docker-entrypoint.sh \
     && mkdir -p \
         /app/runtime/data \
         /app/runtime/browser-profile \
@@ -48,4 +51,4 @@ RUN chmod +x /app/docker-entrypoint.sh \
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
-CMD ["python", "-m", "app.main"]
+CMD ["/opt/venv/bin/python", "-m", "app.main"]

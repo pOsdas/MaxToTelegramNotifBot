@@ -1,0 +1,13 @@
+# Shell-скрипты всегда должны храниться с Linux-переносами строк.
+*.sh text eol=lf
+
+# Файлы, используемые внутри Linux-контейнера.
+Dockerfile text eol=lf
+Makefile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Обычные текстовые файлы.
+*.py text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
