@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -63,6 +61,82 @@ class TelegramFormatter:
             f"Причина: {probe.reason}\n"
             f"Текущий адрес: {probe.url}\n\n"
             "Диагностические файлы сохранены в runtime/screenshots."
+        )
+
+    def parser_problem(
+        self,
+        result,
+        attempts: int,
+    ) -> str:
+        diagnostics = result.diagnostics
+
+        lines = [
+            "Возможна поломка парсера MAX",
+            "",
+            f"Статус: {result.health.value}",
+            (
+                "Проверок восстановления "
+                f"выполнено: {attempts}"
+            ),
+            "",
+            "Причины:",
+        ]
+
+        lines.extend(
+            f"• {reason}"
+            for reason in result.reasons
+        )
+
+        lines.extend(
+            [
+                "",
+                (
+                    "Строк чатов: "
+                    f"{diagnostics.get('chat_row_count', 0)}"
+                ),
+                (
+                    "Распознано имён: "
+                    f"{diagnostics.get('named_chat_count', 0)}"
+                ),
+                (
+                    "Непрочитанных чатов "
+                    "по заголовку: "
+                    f"{diagnostics.get('title_total', 0)}"
+                ),
+                (
+                    "Непрочитанных чатов "
+                    "по DOM: "
+                    f"{diagnostics.get('matched_chat_count', 0)}"
+                ),
+                "",
+                (
+                    "Сервис не принял этот "
+                    "результат за достоверный ноль."
+                ),
+                (
+                    "HTML, JSON и скриншот "
+                    "сохранены в runtime/screenshots."
+                ),
+            ]
+        )
+
+        return "\n".join(lines)
+
+    def parser_recovered(
+        self,
+        snapshot,
+    ) -> str:
+        diagnostics = snapshot.diagnostics
+
+        return (
+            "Парсер MAX восстановился\n\n"
+            "Структура страницы снова "
+            "распознаётся корректно.\n"
+            "Строк чатов: "
+            f"{diagnostics.get('chat_row_count', 0)}\n"
+            f"Непрочитанных: {snapshot.total_unread}\n"
+            "Проверено: "
+            f"{self._format_time(snapshot.captured_at)}"
         )
 
     def error(self, error: Exception) -> str:

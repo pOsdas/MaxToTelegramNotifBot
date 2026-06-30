@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 from pathlib import Path
 from typing import Optional
@@ -73,6 +71,21 @@ class PersistentBrowser:
         if await self._is_usable():
             return self.page
         self._logger.warning("Chromium недоступен, выполняю аварийный перезапуск")
+        return await self.start()
+
+    async def restart(self) -> Page:
+        """
+        Полностью перезапускает Chromium,
+        сохраняя постоянный профиль MAX.
+        """
+
+        self._logger.warning(
+            "Выполняю управляемый "
+            "перезапуск Chromium"
+        )
+
+        await self.close()
+
         return await self.start()
 
     async def close(self) -> None:

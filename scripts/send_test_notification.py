@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 
 from app.core.config import get_settings

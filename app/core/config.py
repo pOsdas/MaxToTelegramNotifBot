@@ -1,9 +1,7 @@
-from __future__ import annotations
-
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,6 +22,12 @@ class Settings(BaseSettings):
     max_page_load_timeout_ms: int = 60_000
     max_dom_settle_seconds: int = 8
     max_retry_interval_seconds: int = 60
+
+    # Защита от тихой поломки парсера.
+    parser_retry_delay_seconds: int = 15
+    parser_alert_interval_seconds: int = 21_600
+    parser_min_named_ratio: float = 0.60
+    parser_success_stale_grace_seconds: int = 900
 
     headless: bool = False
     browser_profile_path: Path = Path("/app/runtime/browser-profile")
@@ -48,13 +52,18 @@ class Settings(BaseSettings):
     @classmethod
     def validate_interval(cls, value: int) -> int:
         if value < 60:
-            raise ValueError("MAX_CHECK_INTERVAL_SECONDS не может быть меньше 60")
+            raise ValueError(
+                "MAX_CHECK_INTERVAL_SECONDS не может быть меньше 60"
+            )
         return value
 
     @field_validator(
         "max_initial_delay_seconds",
         "max_dom_settle_seconds",
         "max_retry_interval_seconds",
+        "parser_retry_delay_seconds",
+        "parser_alert_interval_seconds",
+        "parser_success_stale_grace_seconds",
         "auth_alert_interval_seconds",
         "error_alert_interval_seconds",
         "snapshot_retention_days",
@@ -66,6 +75,16 @@ class Settings(BaseSettings):
     def validate_positive(cls, value: int) -> int:
         if value < 0:
             raise ValueError("Значение не может быть отрицательным")
+        return value
+
+    @field_validator("parser_min_named_ratio")
+    @classmethod
+    def validate_ratio(cls, value: float) -> float:
+        if not 0 < value <= 1:
+            raise ValueError(
+                "PARSER_MIN_NAMED_RATIO должен быть больше 0 "
+                "и не больше 1"
+            )
         return value
 
     def ensure_runtime_directories(self) -> None:
@@ -80,9 +99,14 @@ class Settings(BaseSettings):
 
     def validate_main_runtime(self) -> None:
         if not self.telegram_bot_token.get_secret_value().strip():
-            raise RuntimeError("В .env не заполнен TELEGRAM_BOT_TOKEN")
+            raise RuntimeError(
+                "В .env не заполнен TELEGRAM_BOT_TOKEN"
+            )
+
         if not self.telegram_chat_id.strip():
-            raise RuntimeError("В .env не заполнен TELEGRAM_CHAT_ID")
+            raise RuntimeError(
+                "В .env не заполнен TELEGRAM_CHAT_ID"
+            )
 
 
 @lru_cache(maxsize=1)

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 AUTH_PHONE_SELECTORS = (
     'input[type="tel"]',
     'input[autocomplete="tel"]',

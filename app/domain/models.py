@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import hashlib
 import json
 from datetime import datetime, timezone
@@ -21,6 +19,12 @@ class AuthProbe(BaseModel):
     url: str = ""
 
 
+class ScanHealth(StrEnum):
+    OK = "ok"
+    DEGRADED = "degraded"
+    BROKEN = "broken"
+
+
 class UnreadChat(BaseModel):
     key: str
     name: str = "Неизвестный чат"
@@ -39,7 +43,11 @@ class UnreadSnapshot(BaseModel):
     chats: list[UnreadChat] = Field(default_factory=list)
     source: str = "dom"
     page_title: str = ""
-    captured_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    captured_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+
     diagnostics: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("total_unread")
@@ -58,8 +66,13 @@ class UnreadSnapshot(BaseModel):
                 }
                 for chat in self.chats
             ),
-            key=lambda item: (item["key"], item["name"], item["snippet"]),
+            key=lambda item: (
+                item["key"],
+                item["name"],
+                item["snippet"],
+            ),
         )
+
         return {
             "total_unread": self.total_unread,
             "chats": chats,
@@ -74,7 +87,29 @@ class UnreadSnapshot(BaseModel):
             sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
+
         return hashlib.sha256(encoded).hexdigest()
+
+
+class MaxScanResult(BaseModel):
+    health: ScanHealth
+    snapshot: UnreadSnapshot | None = None
+    reasons: list[str] = Field(default_factory=list)
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def is_trusted(self) -> bool:
+        return (
+            self.health == ScanHealth.OK
+            and self.snapshot is not None
+        )
+
+    @property
+    def reason_text(self) -> str:
+        if not self.reasons:
+            return "Причина не указана"
+
+        return "; ".join(self.reasons)
 
 
 class SnapshotRecord(BaseModel):
@@ -89,4 +124,6 @@ class SnapshotRecord(BaseModel):
     last_error: str | None = None
 
     def to_snapshot(self) -> UnreadSnapshot:
-        return UnreadSnapshot.model_validate_json(self.payload_json)
+        return UnreadSnapshot.model_validate_json(
+            self.payload_json
+        )
